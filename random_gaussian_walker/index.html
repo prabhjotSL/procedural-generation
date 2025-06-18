@@ -207,12 +207,14 @@
         ctx.strokeStyle = this.color;
         ctx.fillStyle = this.color;
         ctx.lineWidth = this.size;
-        if (settings.showTrails) {
+        if (settings.showTrails && !settings.customSprite) {
+          // Only draw lines for trails when no custom sprite is used
           ctx.beginPath();
           ctx.moveTo(this.lastX, this.lastY);
           ctx.lineTo(this.x, this.y);
           ctx.stroke();
         } else {
+          // Always draw shapes/sprites at current position
           drawShape(this.x, this.y, this.size, this.color);
         }
       }
