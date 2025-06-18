@@ -43,15 +43,52 @@
       max-height: 48px;
       display: block;
     }
+
+    #gif-progress {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      z-index: 100;
+      display: none;
+    }
+
+    #progress-bar {
+      width: 300px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4CAF50, #45a049);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
   </style>
 </head>
 
 <body>
   <div id="title">Gaussian Walker Simulation</div>
   <div id="sprite-preview"></div>
+  <div id="gif-progress">
+    <h3>Generating GIF...</h3>
+    <div id="progress-bar">
+      <div id="progress-fill"></div>
+    </div>
+    <div id="progress-text">0%</div>
+  </div>
   <canvas id="canvas"></canvas>
   <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18"></script>
-  <script src="https://unpkg.com/gif.js.optimized/dist/gif.js"></script>
+  <script src="gif.js"></script>
   <script>
     const config = {
       speedMin: 1, speedMax: 15,
@@ -79,12 +116,26 @@
       shape: 'square',
       customSprite: null,
       gifRecording: false,
-      blackAndWhite: false
+      blackAndWhite: false,
+      // GIF settings
+      gifDuration: 5,
+      gifWidth: 600,
+      gifHeight: 600,
+      gifQuality: 10,
+      gifFrameRate: 10
+    };
+
+    const gifConfig = {
+      durationMin: 1, durationMax: 30,
+      widthMin: 200, widthMax: 1200,
+      heightMin: 200, heightMax: 1200,
+      qualityMin: 1, qualityMax: 20,
+      frameRateMin: 5, frameRateMax: 30
     };
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    let walkers = [], isPaused = false, gif = null;
+    let walkers = [], isPaused = false, gif = null, isRecording = false, frameCount = 0, recordingStartTime = 0, generateGifButton = null;
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -99,7 +150,6 @@
         return `rgba(${gray}, ${gray}, ${gray}, 0.5)`;
       }
       const h = settings.hueMin + Math.random() * (settings.hueMax - settings.hueMin);
-      console.log(`Generated hue: ${h}`);
       return `hsla(${h}, 100%, 70%, 0.5)`;
     }
 
@@ -160,10 +210,8 @@
           ctx.moveTo(this.lastX, this.lastY);
           ctx.lineTo(this.x, this.y);
           ctx.stroke();
-          console.log(`Drawing trail from (${this.lastX}, ${this.lastY}) to (${this.x}, ${this.y})`);
         } else {
           drawShape(this.x, this.y, this.size, this.color);
-          console.log(`Drawing shape at (${this.x}, ${this.y}) with size ${this.size} and color ${this.color}`);
         }
       }
 
@@ -214,9 +262,102 @@
       }
       if (!isPaused) {
         walkers.forEach(w => w.update());
-        if (gif) gif.addFrame(ctx, { copy: true, delay: 33 });
+        
+        // GIF recording logic
+        if (gif && isRecording) {
+          const elapsed = (Date.now() - recordingStartTime) / 1000;
+          const shouldAddFrame = frameCount % Math.floor(60 / settings.gifFrameRate) === 0;
+          
+          if (shouldAddFrame) {
+            gif.addFrame(canvas, { copy: true, delay: 1000 / settings.gifFrameRate });
+          }
+          
+          // Update progress
+          const progress = Math.min((elapsed / settings.gifDuration) * 100, 100);
+          updateProgress(progress, 'Recording...');
+          
+          // Stop recording when duration is reached
+          if (elapsed >= settings.gifDuration) {
+            finishGifRecording();
+          }
+        }
+        frameCount++;
       }
       requestAnimationFrame(animate);
+    }
+
+    function updateProgress(percent, text) {
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('progress-text').textContent = Math.round(percent) + '% - ' + text;
+    }
+
+    function showProgress() {
+      document.getElementById('gif-progress').style.display = 'block';
+    }
+
+    function hideProgress() {
+      document.getElementById('gif-progress').style.display = 'none';
+    }
+
+    function startGifGeneration() {
+      // Reset animation
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      createWalkers();
+      frameCount = 0;
+      
+      // Disable button
+      if (generateGifButton) {
+        generateGifButton.domElement.style.pointerEvents = 'none';
+        generateGifButton.domElement.style.opacity = '0.5';
+      }
+      
+      showProgress();
+      updateProgress(0, 'Initializing...');
+      
+      // Create GIF instance
+      gif = new GIF({
+        workers: 2,
+        quality: settings.gifQuality,
+        width: settings.gifWidth,
+        height: settings.gifHeight,
+        workerScript: 'gif.worker.js'
+      });
+      
+      gif.on('progress', function(p) {
+        updateProgress(50 + (p * 50), 'Encoding...');
+      });
+      
+      gif.on('finished', function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `walker_${Date.now()}.gif`;
+        a.click();
+        
+        // Clean up
+        gif = null;
+        isRecording = false;
+        hideProgress();
+        
+        // Re-enable button
+        if (generateGifButton) {
+          generateGifButton.domElement.style.pointerEvents = 'auto';
+          generateGifButton.domElement.style.opacity = '1';
+        }
+      });
+      
+      // Start recording
+      isRecording = true;
+      recordingStartTime = Date.now();
+      updateProgress(5, 'Recording...');
+    }
+
+    function finishGifRecording() {
+      if (gif && isRecording) {
+        isRecording = false;
+        updateProgress(50, 'Processing...');
+        gif.render();
+      }
     }
 
     canvas.addEventListener('click', (e) => {
@@ -277,6 +418,13 @@
       }
     }, 'upload').name('Upload Sprite');
 
+    const gifFolder = gui.addFolder('GIF Settings');
+    gifFolder.add(settings, 'gifDuration', gifConfig.durationMin, gifConfig.durationMax, 0.5).name('Duration (seconds)');
+    gifFolder.add(settings, 'gifWidth', gifConfig.widthMin, gifConfig.widthMax, 50).name('Width');
+    gifFolder.add(settings, 'gifHeight', gifConfig.heightMin, gifConfig.heightMax, 50).name('Height');
+    gifFolder.add(settings, 'gifQuality', gifConfig.qualityMin, gifConfig.qualityMax, 1).name('Quality (lower = better)');
+    gifFolder.add(settings, 'gifFrameRate', gifConfig.frameRateMin, gifConfig.frameRateMax, 1).name('Frame Rate');
+
     const actions = gui.addFolder('Actions');
     actions.add({ pause: () => isPaused = !isPaused }, 'pause').name('Pause/Resume');
     actions.add({
@@ -284,6 +432,16 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         createWalkers();
         isPaused = false;
+        // Stop any ongoing GIF recording
+        if (gif && isRecording) {
+          gif = null;
+          isRecording = false;
+          hideProgress();
+          if (generateGifButton) {
+            generateGifButton.domElement.style.pointerEvents = 'auto';
+            generateGifButton.domElement.style.opacity = '1';
+          }
+        }
       }
     }, 'reset').name('Reset');
     actions.add({
@@ -294,19 +452,8 @@
         link.click();
       }
     }, 'saveImage').name('Save as Image');
-    actions.add({
-      startGif: () => {
-        gif = new GIF({ workers: 2, quality: 10, workerScript: 'https://unpkg.com/gif.js.optimized/dist/gif.worker.js' });
-        gif.on('finished', function (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'walker.gif';
-          a.click();
-        });
-      }
-    }, 'startGif').name('Start GIF');
-    actions.add({ finishGif: () => gif && gif.render() }, 'finishGif').name('Finish GIF');
+    
+    generateGifButton = actions.add({ generateGif: startGifGeneration }, 'generateGif').name('Generate GIF');
   </script>
 </body>
 
