@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Persistent Path Gaussian Walkers</title>
+  <title>Interactive Gaussian Random Walkers</title>
   <style>
     canvas {
       background: #111;
@@ -13,7 +13,7 @@
 </head>
 <body>
 <canvas id="canvas" width="600" height="600"></canvas>
-
+<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18"></script>
 <script>
   class GaussianRandomWalker {
     constructor(ctx, x, y, options = {}) {
@@ -24,7 +24,7 @@
       this.lastY = y;
 
       this.stepSize = options.stepSize || 10;
-      this.dotSize = options.dotSize || 5;
+      this.dotSize = options.dotSize || 2;
       this.color = options.color || 'rgba(255,255,255,0.3)';
       this.canvasWidth = ctx.canvas.width;
       this.canvasHeight = ctx.canvas.height;
@@ -76,7 +76,7 @@
     draw() {
       if (this.persistentPath) {
         this.ctx.strokeStyle = this.color;
-        this.ctx.lineWidth = this.dotSize;
+        this.ctx.lineWidth = 1;
         this.ctx.beginPath();
         this.ctx.moveTo(this.lastX, this.lastY);
         this.ctx.lineTo(this.x, this.y);
@@ -91,66 +91,74 @@
       this.step();
       this.draw();
     }
-  }
 
-  function generateRandomWalkers(ctx, count, ranges, useGaussian = false, persistent = false) {
-    const walkers = [];
-
-    function getRandom(min, max) {
-      return Math.random() * (max - min) + min;
+    updateSettings(settings) {
+      this.stepSize = settings.speed;
+      this.stdDev = settings.pathSharpness;
+      this.mean = settings.directionBias;
+      this.dotSize = settings.dotSize;
+      this.persistentPath = settings.showTrails;
     }
-
-    function getValue(min, max) {
-      if (useGaussian) {
-        const mean = (min + max) / 2;
-        const stdDev = (max - min) / 6;
-        return GaussianRandomWalker.randomGaussian(mean, stdDev);
-      } else {
-        return getRandom(min, max);
-      }
-    }
-
-    for (let i = 0; i < count; i++) {
-      const stepSize = getValue(ranges.stepSize.min, ranges.stepSize.max);
-      const dotSize = getValue(ranges.dotSize.min, ranges.dotSize.max);
-      const mean = getValue(ranges.mean.min, ranges.mean.max);
-      const stdDev = getValue(ranges.stdDev.min, ranges.stdDev.max);
-      const color = `hsla(${Math.random() * 360}, 100%, 70%, 0.5)`;
-
-      walkers.push(new GaussianRandomWalker(
-        ctx,
-        ctx.canvas.width / 2,
-        ctx.canvas.height / 2,
-        { stepSize, dotSize, mean, stdDev, color, persistentPath: persistent }
-      ));
-    }
-
-    return walkers;
   }
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
 
-  const persistent = true; // toggle this to enable/disable persistent path
-  const walkers = generateRandomWalkers(ctx, 10, {
-    stepSize: { min: 5, max: 20 },
-    dotSize: { min: 1, max: 5 },
-    mean: { min: 0, max: 0 },
-    stdDev: { min: 0, max: 5 }
-  }, false, persistent);
+  const settings = {
+    walkerCount: 10,
+    speed: 5,              // maps to stepSize
+    pathSharpness: 1,      // maps to stdDev
+    directionBias: 0,      // maps to mean
+    dotSize: 2,
+    showTrails: false
+  };
+
+  function generateWalkers() {
+    const walkers = [];
+    for (let i = 0; i < settings.walkerCount; i++) {
+      const color = `hsla(${Math.random() * 360}, 100%, 70%, 0.5)`;
+      walkers.push(new GaussianRandomWalker(ctx, canvas.width / 2, canvas.height / 2, {
+        stepSize: settings.speed,
+        stdDev: settings.pathSharpness,
+        mean: settings.directionBias,
+        dotSize: settings.dotSize,
+        color: color,
+        persistentPath: settings.showTrails
+      }));
+    }
+    return walkers;
+  }
+
+  let walkers = generateWalkers();
 
   function animate() {
-    if (!persistent) {
+    if (!settings.showTrails) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     for (const walker of walkers) {
+      walker.updateSettings(settings);
       walker.update();
     }
 
     requestAnimationFrame(animate);
   }
+
+  // lil-gui interface
+  const gui = new lil.GUI();
+  gui.add(settings, 'walkerCount', 1, 100, 1).name('Number of Walkers').onFinishChange(() => {
+    walkers = generateWalkers();
+  });
+  gui.add(settings, 'speed', 1, 15).name('Speed');
+  gui.add(settings, 'pathSharpness', 0, 3).name('Path Sharpness');
+  gui.add(settings, 'directionBias', -1, 1).name('Drift Direction Bias');
+  gui.add(settings, 'dotSize', 1, 5).name('Dot Size');
+  gui.add(settings, 'showTrails').name('Show Continuous Trails').onChange(() => {
+    if (!settings.showTrails) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  });
 
   animate();
 </script>
