@@ -1,207 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <title>Advanced Gaussian Walkers</title>
+  <title>Gaussian Walker Simulation</title>
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       overflow: hidden;
       background: #111;
     }
+
     canvas {
       display: block;
     }
-    #controls {
+
+    #title {
       position: absolute;
       top: 10px;
-      right: 10px;
+      left: 10px;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 24px;
+      font-weight: bold;
       z-index: 10;
+    }
+
+    #sprite-preview {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 10;
+      background: #222;
+      padding: 6px;
+      border-radius: 6px;
+    }
+
+    #sprite-preview img {
+      max-width: 48px;
+      max-height: 48px;
+      display: block;
     }
   </style>
 </head>
+
 <body>
-<canvas id="canvas"></canvas>
-<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18"></script>
-<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.min.js"></script>
-<script>
-  const config = {
-    speed: { min: 1, max: 15, default: 5, name: "Movement Speed" },
-    jitter: { min: 0, max: 3, default: 1, name: "Wiggle Amount" },
-    drift: { min: -1, max: 1, default: 0, name: "Directional Drift" },
-    size: { min: 1, max: 5, default: 2, name: "Dot Size" },
-    walkers: { min: 1, max: 100, default: 10, name: "Walker Count" },
-    colorMode: ['Random', 'Black & White', 'Hue Range'],
-    shape: ['square', 'circle', 'triangle'],
-    hueRange: { min: 0, max: 360, defaultMin: 0, defaultMax: 360 }
-  };
+  <div id="title">Gaussian Walker Simulation</div>
+  <div id="sprite-preview"></div>
+  <canvas id="canvas"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.18"></script>
+  <script src="https://unpkg.com/gif.js.optimized/dist/gif.js"></script>
+  <script>
+    const config = {
+      speedMin: 1, speedMax: 15,
+      jitterMin: 0, jitterMax: 3,
+      driftMin: -1, driftMax: 1,
+      sizeMin: 1, sizeMax: 5,
+      walkerCountMin: 1, walkerCountMax: 100,
+      hueRangeMin: 0, hueRangeMax: 360
+    };
 
-  const settings = {
-    speed: config.speed.default,
-    jitter: config.jitter.default,
-    drift: config.drift.default,
-    size: config.size.default,
-    walkers: config.walkers.default,
-    showTrails: false,
-    colorMode: 'Random',
-    hueMin: config.hueRange.defaultMin,
-    hueMax: config.hueRange.defaultMax,
-    shape: 'square',
-  };
+    const settings = {
+      walkers: 10,
+      speedMin: 2,
+      speedMax: 6,
+      jitterMin: 0.2,
+      jitterMax: 1.5,
+      driftMin: -0.5,
+      driftMax: 0.5,
+      sizeMin: 1,
+      sizeMax: 3,
+      showTrails: false,
+      colorMode: 'Hue Range',
+      hueMin: 0,
+      hueMax: 360,
+      shape: 'square',
+      customSprite: null,
+      gifRecording: false,
+      blackAndWhite: false
+    };
 
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  let walkers = [];
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let walkers = [], isPaused = false, gif = null;
 
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
-
-  function getColor() {
-    switch (settings.colorMode) {
-      case 'Random':
-        return `hsla(${Math.random() * 360}, 100%, 70%, 0.5)`;
-      case 'Black & White':
-        return `rgba(255,255,255,0.5)`;
-      case 'Hue Range':
-        const h = settings.hueMin + Math.random() * (settings.hueMax - settings.hueMin);
-        return `hsla(${h}, 100%, 70%, 0.5)`;
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     }
-  }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
-  class Walker {
-    constructor() {
-      this.x = canvas.width / 2;
-      this.y = canvas.height / 2;
-      this.vx = this.randomGaussian();
-      this.vy = this.randomGaussian();
-      this.lastX = this.x;
-      this.lastY = this.y;
-      this.color = getColor();
+    function getColor() {
+      if (settings.blackAndWhite) {
+        const gray = Math.floor(Math.random() * 256);
+        return `rgba(${gray}, ${gray}, ${gray}, 0.5)`;
+      }
+      const h = settings.hueMin + Math.random() * (settings.hueMax - settings.hueMin);
+      console.log(`Generated hue: ${h}`);
+      return `hsla(${h}, 100%, 70%, 0.5)`;
     }
 
-    randomGaussian(mean = settings.drift, std = settings.jitter) {
-      let u = 0, v = 0;
-      while (u === 0) u = Math.random();
-      while (v === 0) v = Math.random();
-      const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-      return z * std + mean;
+    class Walker {
+      constructor() {
+        // Ensure canvas has valid dimensions before setting position
+        const centerX = canvas.width > 0 ? canvas.width / 2 : window.innerWidth / 2;
+        const centerY = canvas.height > 0 ? canvas.height / 2 : window.innerHeight / 2;
+
+        this.x = centerX;
+        this.y = centerY;
+        this.vx = this.randomGaussian();
+        this.vy = this.randomGaussian();
+        this.lastX = this.x;
+        this.lastY = this.y;
+        this.color = getColor();
+        this.speed = randomRange(settings.speedMin, settings.speedMax);
+        this.jitter = randomRange(settings.jitterMin, settings.jitterMax);
+        this.drift = randomRange(settings.driftMin, settings.driftMax);
+        this.size = randomRange(settings.sizeMin, settings.sizeMax);
+      }
+
+      randomGaussian(mean = this.drift, std = this.jitter) {
+        let u = 0, v = 0;
+        while (u === 0) u = Math.random();
+        while (v === 0) v = Math.random();
+        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * std + mean;
+      }
+
+      step() {
+        this.vx += this.randomGaussian() * 0.2;
+        this.vy += this.randomGaussian() * 0.2;
+        this.vx = Math.max(-this.speed, Math.min(this.speed, this.vx));
+        this.vy = Math.max(-this.speed, Math.min(this.speed, this.vy));
+        this.lastX = this.x;
+        this.lastY = this.y;
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Add bounds checking to prevent NaN values
+        if (isNaN(this.x) || isNaN(this.y)) {
+          this.x = canvas.width / 2;
+          this.y = canvas.height / 2;
+          this.vx = 0;
+          this.vy = 0;
+        }
+
+        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+      }
+
+      draw() {
+        ctx.strokeStyle = this.color;
+        ctx.fillStyle = this.color;
+        ctx.lineWidth = this.size;
+        if (settings.showTrails) {
+          ctx.beginPath();
+          ctx.moveTo(this.lastX, this.lastY);
+          ctx.lineTo(this.x, this.y);
+          ctx.stroke();
+          console.log(`Drawing trail from (${this.lastX}, ${this.lastY}) to (${this.x}, ${this.y})`);
+        } else {
+          drawShape(this.x, this.y, this.size, this.color);
+          console.log(`Drawing shape at (${this.x}, ${this.y}) with size ${this.size} and color ${this.color}`);
+        }
+      }
+
+      update() {
+        this.step();
+        this.draw();
+      }
     }
 
-    step() {
-      this.vx += this.randomGaussian() * 0.2;
-      this.vy += this.randomGaussian() * 0.2;
-      const maxSpeed = settings.speed;
-      this.vx = Math.max(-maxSpeed, Math.min(maxSpeed, this.vx));
-      this.vy = Math.max(-maxSpeed, Math.min(maxSpeed, this.vy));
-      this.lastX = this.x;
-      this.lastY = this.y;
-      this.x += this.vx;
-      this.y += this.vy;
-
-      if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
-      if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
-    }
-
-    draw() {
-      ctx.strokeStyle = this.color;
-      ctx.fillStyle = this.color;
-      ctx.lineWidth = settings.size;
-
-      if (settings.showTrails) {
-        ctx.beginPath();
-        ctx.moveTo(this.lastX, this.lastY);
-        ctx.lineTo(this.x, this.y);
-        ctx.stroke();
+    function drawShape(x, y, size, color) {
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+      if (settings.customSprite) {
+        ctx.drawImage(settings.customSprite, x - size, y - size, size * 2, size * 2);
       } else {
         switch (settings.shape) {
           case 'circle':
             ctx.beginPath();
-            ctx.arc(this.x, this.y, settings.size / 2, 0, Math.PI * 2);
+            ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
             break;
           case 'triangle':
             ctx.beginPath();
-            ctx.moveTo(this.x, this.y - settings.size);
-            ctx.lineTo(this.x - settings.size, this.y + settings.size);
-            ctx.lineTo(this.x + settings.size, this.y + settings.size);
+            ctx.moveTo(x, y - size);
+            ctx.lineTo(x - size, y + size);
+            ctx.lineTo(x + size, y + size);
             ctx.closePath();
             ctx.fill();
             break;
           default:
-            ctx.fillRect(this.x, this.y, settings.size, settings.size);
+            ctx.fillRect(x, y, size, size);
         }
       }
     }
 
-    update() {
-      this.step();
-      this.draw();
+    function createWalkers() {
+      walkers = Array.from({ length: settings.walkers }, () => new Walker());
     }
-  }
 
-  function createWalkers() {
-    walkers = Array.from({ length: settings.walkers }, () => new Walker());
-  }
-
-  let isPaused = false;
-  function animate() {
-    if (!isPaused && !settings.showTrails) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    function randomRange(min, max) {
+      return min + Math.random() * (max - min);
     }
-    if (!isPaused) {
-      walkers.forEach(w => w.update());
+
+    function animate() {
+      if (!isPaused && !settings.showTrails) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      if (!isPaused) {
+        walkers.forEach(w => w.update());
+        if (gif) gif.addFrame(ctx, { copy: true, delay: 33 });
+      }
+      requestAnimationFrame(animate);
     }
-    requestAnimationFrame(animate);
-  }
 
-  createWalkers();
-  animate();
-
-  // GUI setup
-  const gui = new lil.GUI();
-  gui.add(settings, 'walkers', config.walkers.min, config.walkers.max, 1).name(config.walkers.name).onFinishChange(createWalkers).domElement.title = 'How many walkers to show';
-  gui.add(settings, 'speed', config.speed.min, config.speed.max).name(config.speed.name).domElement.title = 'How fast each dot can move';
-  gui.add(settings, 'jitter', config.jitter.min, config.jitter.max).name(config.jitter.name).domElement.title = 'More wiggle makes the path more chaotic';
-  gui.add(settings, 'drift', config.drift.min, config.drift.max).name(config.drift.name).domElement.title = 'Directional bias (e.g., rightward drift = +ve)';
-  gui.add(settings, 'size', config.size.min, config.size.max).name(config.size.name).domElement.title = 'How big the dot/line appears';
-  gui.add(settings, 'showTrails').name('Persistent Trails').domElement.title = 'Draw continuous lines instead of dots';
-  gui.add(settings, 'colorMode', config.colorMode).name('Color Scheme').domElement.title = 'Color mode for each walker';
-  gui.add(settings, 'shape', config.shape).name('Dot Shape').domElement.title = 'Choose shape of walker';
-  const hueFolder = gui.addFolder('Hue Range');
-  hueFolder.add(settings, 'hueMin', config.hueRange.min, config.hueRange.max).name('Min Hue');
-  hueFolder.add(settings, 'hueMax', config.hueRange.min, config.hueRange.max).name('Max Hue');
-
-  // Buttons
-  gui.add({ pause: () => isPaused = !isPaused }, 'pause').name('Pause/Resume');
-  gui.add({ reset: () => { ctx.clearRect(0, 0, canvas.width, canvas.height); createWalkers(); } }, 'reset').name('Reset');
-  gui.add({ saveImage: () => {
-    const link = document.createElement('a');
-    link.download = 'walker.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  }}, 'saveImage').name('Save as Image');
-  gui.add({ saveGif: () => {
-    const gif = new GIF({ workers: 2, quality: 10, width: canvas.width, height: canvas.height });
-    let frameCount = 60;
-    isPaused = false;
-    for (let i = 0; i < frameCount; i++) {
-      walkers.forEach(w => w.update());
-      gif.addFrame(ctx, { copy: true, delay: 33 });
-    }
-    gif.on('finished', blob => {
-      const link = document.createElement('a');
-      link.download = 'walker.gif';
-      link.href = URL.createObjectURL(blob);
-      link.click();
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const w = new Walker();
+      w.x = x;
+      w.y = y;
+      walkers.push(w);
     });
-    gif.render();
-  }}, 'saveGif').name('Save as GIF');
-</script>
+
+    // Ensure canvas is properly sized before creating walkers
+    resizeCanvas();
+    createWalkers();
+    animate();
+
+    const gui = new lil.GUI();
+
+    const generalFolder = gui.addFolder('Walker Settings');
+    generalFolder.add(settings, 'walkers', config.walkerCountMin, config.walkerCountMax, 1).name('Walker Count').onFinishChange(createWalkers);
+
+    const motionFolder = gui.addFolder('Walker Properties');
+    motionFolder.add(settings, 'speedMin', config.speedMin, config.speedMax).name('Speed Min');
+    motionFolder.add(settings, 'speedMax', config.speedMin, config.speedMax).name('Speed Max');
+    motionFolder.add(settings, 'jitterMin', config.jitterMin, config.jitterMax).name('Wiggle Min');
+    motionFolder.add(settings, 'jitterMax', config.jitterMin, config.jitterMax).name('Wiggle Max');
+    motionFolder.add(settings, 'driftMin', config.driftMin, config.driftMax).name('Drift Min');
+    motionFolder.add(settings, 'driftMax', config.driftMin, config.driftMax).name('Drift Max');
+    motionFolder.add(settings, 'sizeMin', config.sizeMin, config.sizeMax).name('Dot Size Min');
+    motionFolder.add(settings, 'sizeMax', config.sizeMin, config.sizeMax).name('Dot Size Max');
+    motionFolder.add(settings, 'shape', ['square', 'circle', 'triangle']).name('Dot Shape');
+
+    const colorFolder = gui.addFolder('Color Settings');
+    colorFolder.add(settings, 'showTrails').name('Persistent Trails');
+    colorFolder.add(settings, 'blackAndWhite').name('Black & White');
+    colorFolder.add(settings, 'hueMin', config.hueRangeMin, config.hueRangeMax).name('Min Hue');
+    colorFolder.add(settings, 'hueMax', config.hueRangeMin, config.hueRangeMax).name('Max Hue');
+    colorFolder.add({
+      upload: () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = e => {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const img = new Image();
+            img.onload = () => {
+              settings.customSprite = img;
+              document.getElementById('sprite-preview').innerHTML = '<img src="' + img.src + '" />';
+            };
+            img.src = ev.target.result;
+          };
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      }
+    }, 'upload').name('Upload Sprite');
+
+    const actions = gui.addFolder('Actions');
+    actions.add({ pause: () => isPaused = !isPaused }, 'pause').name('Pause/Resume');
+    actions.add({
+      reset: () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        createWalkers();
+        isPaused = false;
+      }
+    }, 'reset').name('Reset');
+    actions.add({
+      saveImage: () => {
+        const link = document.createElement('a');
+        link.download = 'walker.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }
+    }, 'saveImage').name('Save as Image');
+    actions.add({
+      startGif: () => {
+        gif = new GIF({ workers: 2, quality: 10, workerScript: 'https://unpkg.com/gif.js.optimized/dist/gif.worker.js' });
+        gif.on('finished', function (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'walker.gif';
+          a.click();
+        });
+      }
+    }, 'startGif').name('Start GIF');
+    actions.add({ finishGif: () => gif && gif.render() }, 'finishGif').name('Finish GIF');
+  </script>
 </body>
+
 </html>
