@@ -126,11 +126,11 @@
     };
 
     const gifConfig = {
-      durationMin: 1, durationMax: 30,
+      durationMin: 1, durationMax: 60,
       widthMin: 200, widthMax: 1200,
       heightMin: 200, heightMax: 1200,
       qualityMin: 1, qualityMax: 20,
-      frameRateMin: 5, frameRateMax: 30
+      frameRateMin: 5, frameRateMax: 60
     };
 
     const canvas = document.getElementById('canvas');
@@ -269,7 +269,27 @@
           const shouldAddFrame = frameCount % Math.floor(60 / settings.gifFrameRate) === 0;
           
           if (shouldAddFrame) {
-            gif.addFrame(canvas, { copy: true, delay: 1000 / settings.gifFrameRate });
+            // Create a temporary canvas to capture the center portion
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = settings.gifWidth;
+            tempCanvas.height = settings.gifHeight;
+            
+            // Calculate center crop area
+            const cropSize = Math.min(settings.gifWidth, settings.gifHeight);
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const cropX = centerX - cropSize / 2;
+            const cropY = centerY - cropSize / 2;
+            
+            // Draw the center portion of the main canvas to temp canvas, scaled to fit
+            tempCtx.drawImage(
+              canvas,
+              cropX, cropY, cropSize, cropSize,  // source rectangle (center crop)
+              0, 0, settings.gifWidth, settings.gifHeight  // destination rectangle
+            );
+            
+            gif.addFrame(tempCanvas, { copy: true, delay: 1000 / settings.gifFrameRate });
           }
           
           // Update progress
