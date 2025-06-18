@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gaussian Random Walker with Custom μ and σ</title>
+  <title>Gaussian Random Walkers with Utility Generator</title>
   <style>
     canvas {
       background: #111;
@@ -12,111 +12,141 @@
   </style>
 </head>
 <body>
-  <canvas id="canvas" width="600" height="600"></canvas>
+<canvas id="canvas" width="600" height="600"></canvas>
 
-  <script>
-    class GaussianRandomWalker {
-      constructor(ctx, x, y, options = {}) {
-        this.ctx = ctx;
-        this.x = x;
-        this.y = y;
+<script>
+  class GaussianRandomWalker {
+    constructor(ctx, x, y, options = {}) {
+      this.ctx = ctx;
+      this.x = x;
+      this.y = y;
 
-        this.stepSize = options.stepSize || 10;
-        this.dotSize = options.dotSize || 5;
-        this.color = options.color || 'rgba(255,255,255,0.3)';
-        this.canvasWidth = ctx.canvas.width;
-        this.canvasHeight = ctx.canvas.height;
+      this.stepSize = options.stepSize || 10;
+      this.dotSize = options.dotSize || 10;
+      this.color = options.color || 'rgba(255,255,255,0.3)';
+      this.canvasWidth = ctx.canvas.width;
+      this.canvasHeight = ctx.canvas.height;
 
-        // Gaussian parameters
-        this.mean = options.mean || 0;
-        this.stdDev = options.stdDev || 1;
+      this.mean = options.mean || 0;
+      this.stdDev = options.stdDev || 1;
 
-        // Velocity (initial random)
-        this.vx = this.randomGaussian();
-        this.vy = this.randomGaussian();
+      this.vx = this.randomGaussian();
+      this.vy = this.randomGaussian();
+    }
+
+    static randomGaussian(mean = 0, stdDev = 1) {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      return z * stdDev + mean;
+    }
+
+    randomGaussian(mean = this.mean, stdDev = this.stdDev) {
+      return GaussianRandomWalker.randomGaussian(mean, stdDev);
+    }
+
+    step() {
+      this.vx += this.randomGaussian() * 0.2;
+      this.vy += this.randomGaussian() * 0.2;
+
+      const maxSpeed = this.stepSize;
+      this.vx = Math.max(-maxSpeed, Math.min(maxSpeed, this.vx));
+      this.vy = Math.max(-maxSpeed, Math.min(maxSpeed, this.vy));
+
+      this.x += this.vx;
+      this.y += this.vy;
+
+      if (this.x < 0 || this.x > this.canvasWidth) {
+        this.vx *= -1;
+        this.x = Math.max(0, Math.min(this.canvasWidth, this.x));
       }
-
-      // Box-Muller with mean and std deviation
-      randomGaussian(mean = this.mean, stdDev = this.stdDev) {
-        let u = 0, v = 0;
-        while (u === 0) u = Math.random();
-        while (v === 0) v = Math.random();
-        const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-        return z * stdDev + mean;
-      }
-
-      step() {
-        // Add slight Gaussian noise to velocity
-        this.vx += this.randomGaussian() * 0.2;
-        this.vy += this.randomGaussian() * 0.2;
-
-        const maxSpeed = this.stepSize;
-        this.vx = Math.max(-maxSpeed, Math.min(maxSpeed, this.vx));
-        this.vy = Math.max(-maxSpeed, Math.min(maxSpeed, this.vy));
-
-        this.x += this.vx;
-        this.y += this.vy;
-
-        // Bounce at edges
-        if (this.x < 0 || this.x > this.canvasWidth) {
-          this.vx *= -1;
-          this.x = Math.max(0, Math.min(this.canvasWidth, this.x));
-        }
-        if (this.y < 0 || this.y > this.canvasHeight) {
-          this.vy *= -1;
-          this.y = Math.max(0, Math.min(this.canvasHeight, this.y));
-        }
-      }
-
-      draw() {
-        this.ctx.fillStyle = this.color;
-        this.ctx.fillRect(this.x, this.y, this.dotSize, this.dotSize);
-      }
-
-      update() {
-        this.step();
-        this.draw();
+      if (this.y < 0 || this.y > this.canvasHeight) {
+        this.vy *= -1;
+        this.y = Math.max(0, Math.min(this.canvasHeight, this.y));
       }
     }
 
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // Multiple walkers with different μ and σ
-    const walkers = [
-      new GaussianRandomWalker(ctx, 300, 300, {
-        stepSize: 6,
-        color: 'rgba(255, 0, 0, 1)',
-        mean: 0,
-        stdDev: 0.5
-      }),
-      new GaussianRandomWalker(ctx, 300, 300, {
-        stepSize: 6,
-        color: 'rgba(0, 255, 0, 1)',
-        mean: 0,
-        stdDev: 1.5
-      }),
-      new GaussianRandomWalker(ctx, 300, 300, {
-        stepSize: 6,
-        color: 'rgba(0, 150, 255, 1)',
-        mean: 0.5,
-        stdDev: 1.2
-      }),
-    ];
-
-    function animate() {
-      // Optional fade trails
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      for (const walker of walkers) {
-        walker.update();
-      }
-
-      requestAnimationFrame(animate);
+    draw() {
+      this.ctx.fillStyle = this.color;
+      this.ctx.fillRect(this.x, this.y, this.dotSize, this.dotSize);
     }
 
-    animate();
-  </script>
+    update() {
+      this.step();
+      this.draw();
+    }
+  }
+
+  /**
+   * Utility to generate N random walkers.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} count - Number of walkers to create
+   * @param {Object} ranges - Range config for stepSize, dotSize, mean, stdDev
+   * @param {boolean} useGaussian - Use gaussian for generating values instead of uniform
+   * @returns {GaussianRandomWalker[]}
+   */
+  function generateRandomWalkers(ctx, count, ranges, useGaussian = false) {
+    const walkers = [];
+
+    function getRandom(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function getValue(min, max) {
+      if (useGaussian) {
+        const mean = (min + max) / 2;
+        const stdDev = (max - min) / 6; // 99.7% of values within range
+        return GaussianRandomWalker.randomGaussian(mean, stdDev);
+      } else {
+        return getRandom(min, max);
+      }
+    }
+
+    for (let i = 0; i < count; i++) {
+      const stepSize = getValue(ranges.stepSize.min, ranges.stepSize.max);
+      const dotSize = getValue(ranges.dotSize.min, ranges.dotSize.max);
+      const mean = getValue(ranges.mean.min, ranges.mean.max);
+      const stdDev = getValue(ranges.stdDev.min, ranges.stdDev.max);
+
+      const color = `hsla(${Math.floor(Math.random() * 360)}, 100%, 70%, 0.3)`;
+
+      walkers.push(new GaussianRandomWalker(
+        ctx,
+        ctx.canvas.width / 2,
+        ctx.canvas.height / 2,
+        { stepSize, dotSize, mean, stdDev, color }
+      ));
+    }
+
+    return walkers;
+  }
+
+  // Initialize canvas
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Generate walkers using either uniform or gaussian sampling
+  const walkers = generateRandomWalkers(ctx, 5, {
+    stepSize: { min: 3, max: 6 },
+    dotSize: { min: 1, max: 10 },
+    mean: { min: -1, max: 1 },
+    stdDev: { min: 5, max: 20 }
+  }, true); // set to false to use uniform distribution
+
+  // Animate
+  function animate() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (const walker of walkers) {
+      walker.update();
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+</script>
 </body>
 </html>
