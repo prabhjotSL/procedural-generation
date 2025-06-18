@@ -95,12 +95,12 @@
       jitterMin: 0, jitterMax: 5,
       driftMin: -1, driftMax: 1,
       sizeMin: 1, sizeMax: 10,
-      walkerCountMin: 1, walkerCountMax: 250,
+      walkerCountMin: 1, walkerCountMax: 1000,
       hueRangeMin: 0, hueRangeMax: 360
     };
 
     const settings = {
-      walkers: 35,
+      walkers: 75,
       speedMin: 2,
       speedMax: 6,
       jitterMin: 0.2,
@@ -118,6 +118,7 @@
       gifRecording: false,
       blackAndWhite: false,
       trailOpacity: 0.5,
+      backgroundColor: '#111111',
       // GIF settings
       gifDuration: 5,
       gifWidth: 1024,
@@ -256,10 +257,20 @@
       return min + Math.random() * (max - min);
     }
 
+    function hexToRgb(hex) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 17, g: 17, b: 17 }; // fallback to default dark gray
+    }
+
     function animate() {
       if (!isPaused && !settings.showTrails) {
-        const alpha = settings.trailOpacity * 0.25; // Map 0-1 to 0-0.25
-        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        const alpha = 1 - settings.trailOpacity; // Map 0-1 to 1-0
+        const bgColor = hexToRgb(settings.backgroundColor);
+        ctx.fillStyle = `rgba(${bgColor.r}, ${bgColor.g}, ${bgColor.b}, ${alpha})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       if (!isPaused) {
@@ -414,6 +425,13 @@
     motionFolder.add(settings, 'shape', ['square', 'circle', 'triangle']).name('Dot Shape');
 
     const colorFolder = gui.addFolder('Color Settings');
+    colorFolder.addColor(settings, 'backgroundColor').name('Background Color').onChange(() => {
+      // Apply background immediately if trails are off
+      if (!settings.showTrails) {
+        ctx.fillStyle = settings.backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    });
     colorFolder.add(settings, 'showTrails').name('Persistent Trails');
     colorFolder.add(settings, 'trailOpacity', 0, 1, 0.01).name('Trail Opacity');
     colorFolder.add(settings, 'blackAndWhite').name('Black & White');
@@ -452,7 +470,9 @@
     actions.add({ pause: () => isPaused = !isPaused }, 'pause').name('Pause/Resume');
     actions.add({
       reset: () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Apply background color first
+        ctx.fillStyle = settings.backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         createWalkers();
         isPaused = false;
         // Stop any ongoing GIF recording
