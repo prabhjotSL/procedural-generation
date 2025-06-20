@@ -38,31 +38,29 @@
   <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>
   <script>
     const canvas = document.getElementById('perlinCanvas');
-    const ctx = canvas.getContext('2d');
-
-    const presets = {
+    const ctx = canvas.getContext('2d');    const presets = {
       Island: {
         scale: 50, seed: 0, mask: true, maskShape: 'circle',
         thresholds: [
-          { threshold: 0.2, color: '#000000' },
-          { threshold: 0.3, color: '#ffe39f' },
-          { threshold: 0.4, color: '#a0703e' },
-          { threshold: 0.5, color: '#88c070' },
-          { threshold: 0.6, color: '#336633' },
-          { threshold: 0.75, color: '#888888' },
-          { threshold: 1.0, color: '#ffffff' }
+          { threshold: 0.0, color: '#4169E1' },    // Deep blue water
+          { threshold: 0.02, color: '#EED6AF' },   // Beach sand
+          { threshold: 0.04, color: '#D2B48C' },   // Sandy areas
+          { threshold: 0.15, color: '#228B22' },   // Green vegetation
+          { threshold: 0.30, color: '#006400' },   // Dark green forest
+          { threshold: 0.45, color: '#8B8989' },   // Mountain rock
+          { threshold: 1.0, color: '#FFFAFA' }     // Snow peaks
         ]
       },
       Archipelago: {
         scale: 120, seed: 8, mask: true, maskShape: 'circle',
         thresholds: [
-          { threshold: 0.4, color: '#000000' },
-          { threshold: 0.48, color: '#ffe39f' },
-          { threshold: 0.55, color: '#a0703e' },
-          { threshold: 0.65, color: '#88c070' },
-          { threshold: 0.75, color: '#336633' },
-          { threshold: 0.85, color: '#888888' },
-          { threshold: 1.0, color: '#ffffff' }
+          { threshold: 0.0, color: '#4169E1' },    // Deep blue water
+          { threshold: 0.01, color: '#EED6AF' },   // Beach sand
+          { threshold: 0.03, color: '#D2B48C' },   // Sandy areas
+          { threshold: 0.12, color: '#228B22' },   // Green vegetation
+          { threshold: 0.25, color: '#006400' },   // Dark green forest
+          { threshold: 0.35, color: '#8B8989' },   // Mountain rock
+          { threshold: 1.0, color: '#FFFAFA' }     // Snow peaks
         ]
       },
       Desert: {
@@ -96,14 +94,12 @@
           { threshold: 1.0, color: '#ffffff' }
         ]
       }
-    };    // Performance optimization - debounced draw function
+    };// Performance optimization - debounced draw function
     let drawTimeout;
     function debouncedDraw() {
       clearTimeout(drawTimeout);
       drawTimeout = setTimeout(draw, 50); // 50ms debounce
-    }
-
-    const config = {
+    }    const config = {
       width: 400,
       height: 400,
       scale: 50,
@@ -116,6 +112,7 @@
       shading: true,
       mask: true,
       maskShape: 'circle',
+      maskContrast: 4.0,
       thresholds: JSON.parse(JSON.stringify(presets.Island.thresholds)),
       currentPreset: 'Island',
       applyPreset(name) {
@@ -124,6 +121,7 @@
         config.seed = preset.seed;
         config.mask = preset.mask ?? true;
         config.maskShape = preset.maskShape ?? 'circle';
+        config.maskContrast = preset.maskContrast ?? 4.0;
         config.thresholds = JSON.parse(JSON.stringify(preset.thresholds));
         config.currentPreset = name;
 
@@ -132,6 +130,7 @@
         guiControllers.seed.setValue(config.seed);
         guiControllers.mask.setValue(config.mask);
         guiControllers.maskShape.setValue(config.maskShape);
+        guiControllers.maskContrast.setValue(config.maskContrast);
         presetController.setValue(name);
 
         rebuildThresholdGUI();
@@ -152,6 +151,7 @@
     guiControllers.shading = gui.add(config, 'shading').onChange(debouncedDraw);
     guiControllers.mask = gui.add(config, 'mask').onChange(debouncedDraw);
     guiControllers.maskShape = gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(debouncedDraw);
+    guiControllers.maskContrast = gui.add(config, 'maskContrast', 1.0, 10.0, 0.1).name('Mask Contrast').onChange(debouncedDraw);
     gui.add(config, 'regenerate');
 
     // Add preset controller with Custom option
@@ -290,21 +290,73 @@
         }
       }
       return hexToRgb('#ffffff');
-    }
-
-    function applyMask(x, y, value) {
+    }    function applyMask(x, y, value) {
       if (!config.mask) return value;
       const cx = config.width / 2, cy = config.height / 2;
-      const dx = (x - cx) / (config.width / 2);
-      const dy = (y - cy) / (config.height / 2);
+      
       if (config.maskShape === 'circle') {
-        return value * (1 - Math.min(Math.sqrt(dx * dx + dy * dy), 1));
+        // Calculate distance from center (Python algorithm)
+        const distx = Math.abs(x - cx);
+        const disty = Math.abs(y - cy);
+        const dist = Math.sqrt(distx * distx + disty * disty);
+        
+        // Get maximum possible distance (diagonal to corner)
+        const maxGrad = Math.sqrt(cx * cx + cy * cy);
+        
+        // Normalize distance to 0-1
+        let circleGrad = dist / maxGrad;
+        
+        // Apply Python transformations: shrink, renormalize, invert
+        circleGrad = circleGrad - 0.5;  // Center around 0 (-0.5 to 0.5)
+        circleGrad = circleGrad * 2.0;  // Scale to -1 to 1
+        circleGrad = -circleGrad;       // Invert (center becomes positive, edges negative)
+        
+        // Apply noise only where gradient is positive (inside island)
+        if (circleGrad > 0) {
+          // Multiply noise by gradient (following Python implementation)
+          let maskedValue = value * circleGrad;
+          
+          // Apply contrast enhancement using configurable multiplier
+          if (maskedValue > 0) {
+            maskedValue = maskedValue * config.maskContrast;
+          }
+          
+          // Clamp to 0-1 range (renormalization)
+          return Math.max(0, Math.min(1, maskedValue));
+        } else {
+          return 0; // Water/ocean areas (negative gradient)
+        }
       } else if (config.maskShape === 'square') {
-        return value * (1 - Math.min(Math.max(Math.abs(dx), Math.abs(dy)), 1));
+        const dx = Math.abs(x - cx) / cx;
+        const dy = Math.abs(y - cy) / cy;
+        const squareDist = Math.max(dx, dy);
+        let squareGrad = 1 - squareDist;
+        squareGrad = Math.max(0, squareGrad);
+        
+        if (squareGrad > 0) {
+          let maskedValue = value * squareGrad;
+          if (maskedValue > 0) {
+            maskedValue = maskedValue * (config.maskContrast * 0.75);
+          }
+          return Math.max(0, Math.min(1, maskedValue));
+        }
+        return 0;
       } else if (config.maskShape === 'hexagon') {
+        const dx = Math.abs(x - cx) / cx;
+        const dy = Math.abs(y - cy) / cy;
         const qx = Math.abs(dx), qy = Math.abs(dy);
-        const d = Math.max(qx, qy * 0.866 + qx * 0.5);
-        return value * (1 - Math.min(d, 1));
+        const hexDist = Math.max(qx, qy * 0.866 + qx * 0.5);
+        let hexGrad = 1 - hexDist;
+        hexGrad = Math.max(0, hexGrad);
+        
+        if (hexGrad > 0) {
+          let maskedValue = value * hexGrad;
+          if (maskedValue > 0) {
+            maskedValue = maskedValue * (config.maskContrast * 0.75);
+          }
+          return Math.max(0, Math.min(1, maskedValue));
+        }
+        return 0;
       }
       return value;
     }
