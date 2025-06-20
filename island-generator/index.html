@@ -43,6 +43,76 @@
     const canvas = document.getElementById('perlinCanvas');
     const ctx = canvas.getContext('2d');
 
+    const presets = {
+      Island: {
+        scale: 50,
+        seed: 0,
+        mask: true,
+        maskShape: 'circle',
+        thresholds: [
+          { threshold: 0.2, color: '#000000' },
+          { threshold: 0.3, color: '#ffe39f' },
+          { threshold: 0.4, color: '#a0703e' },
+          { threshold: 0.5, color: '#88c070' },
+          { threshold: 0.6, color: '#336633' },
+          { threshold: 0.75, color: '#888888' },
+          { threshold: 1.0, color: '#ffffff' }
+        ]
+      },
+      Archipelago: {
+        scale: 120,
+        seed: 8,
+        mask: true,
+        maskShape: 'circle',
+        thresholds: [
+          { threshold: 0.4, color: '#000000' },
+          { threshold: 0.48, color: '#ffe39f' },
+          { threshold: 0.55, color: '#a0703e' },
+          { threshold: 0.65, color: '#88c070' },
+          { threshold: 0.75, color: '#336633' },
+          { threshold: 0.85, color: '#888888' },
+          { threshold: 1.0, color: '#ffffff' }
+        ]
+      },
+      Desert: {
+        scale: 80,
+        seed: 3,
+        mask: false,
+        thresholds: [
+          { threshold: 0.3, color: '#000000' },
+          { threshold: 0.5, color: '#e0c080' },
+          { threshold: 0.7, color: '#d9b26f' },
+          { threshold: 0.85, color: '#aa9966' },
+          { threshold: 1.0, color: '#888888' }
+        ]
+      },
+      Rainforest: {
+        scale: 45,
+        seed: 10,
+        mask: false,
+        thresholds: [
+          { threshold: 0.25, color: '#000000' },
+          { threshold: 0.35, color: '#ffe39f' },
+          { threshold: 0.45, color: '#65b84f' },
+          { threshold: 0.6, color: '#3e9f3e' },
+          { threshold: 0.75, color: '#2c662c' },
+          { threshold: 1.0, color: '#1f4d1f' }
+        ]
+      },
+      Mountains: {
+        scale: 40,
+        seed: 1,
+        mask: false,
+        thresholds: [
+          { threshold: 0.4, color: '#333333' },
+          { threshold: 0.5, color: '#777777' },
+          { threshold: 0.7, color: '#aaaaaa' },
+          { threshold: 0.85, color: '#dddddd' },
+          { threshold: 1.0, color: '#ffffff' }
+        ]
+      }
+    };
+
     const config = {
       width: 400,
       height: 400,
@@ -56,17 +126,36 @@
       shading: true,
       mask: true,
       maskShape: 'circle',
-      regenerate: () => draw(),
-      thresholds: [
-        { threshold: 0.2, color: '#000000' },  // Ocean
-        { threshold: 0.3, color: '#ffe39f' },  // Beach
-        { threshold: 0.4, color: '#a0703e' },  // Land
-        { threshold: 0.5, color: '#88c070' },  // Grass
-        { threshold: 0.6, color: '#336633' },  // Trees
-        { threshold: 0.75, color: '#888888' }, // Mountains
-        { threshold: 1.0, color: '#ffffff' }   // Snow
-      ]
+      thresholds: JSON.parse(JSON.stringify(presets.Island.thresholds)),
+      applyPreset(name) {
+        const preset = presets[name];
+        config.scale = preset.scale;
+        config.seed = preset.seed;
+        config.mask = preset.mask;
+        config.maskShape = preset.maskShape;
+        config.thresholds = JSON.parse(JSON.stringify(preset.thresholds));
+        draw();
+        rebuildThresholdGUI();
+      },
+      regenerate: () => draw()
     };
+
+    // Rebuild threshold UI
+    let thresholdFolder;
+    function rebuildThresholdGUI() {
+      if (thresholdFolder) gui.removeFolder(thresholdFolder);
+      thresholdFolder = gui.addFolder('Thresholds');
+      config.thresholds.forEach((layer, i) => {
+        const f = thresholdFolder.addFolder(`Layer ${i + 1}`);
+        f.add(layer, 'threshold', 0, 1, 0.01).onChange(draw);
+        f.addColor(layer, 'color').onChange(draw);
+      });
+      thresholdFolder.add({ addLayer: () => {
+        config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
+        rebuildThresholdGUI();
+        draw();
+      }}, 'addLayer');
+    }
 
     function fract(x) { return x - Math.floor(x); }
     function pseudoRandom(x, y, seed = 0) {
@@ -258,19 +347,28 @@
     gui.add(config, 'mask').onChange(draw);
     gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(draw);
     gui.add(config, 'regenerate');
+    gui.add(config, 'applyPreset', Object.keys(presets)).name('Load Preset');
 
-    const thresholdFolder = gui.addFolder('Thresholds');
-    config.thresholds.forEach((layer, i) => {
-      const f = thresholdFolder.addFolder(`Layer ${i + 1}`);
-      f.add(layer, 'threshold', 0, 1, 0.01).onChange(draw);
-      f.addColor(layer, 'color').onChange(draw);
+    rebuildThresholdGUI();
+    draw();
+    requestAnimationFrame(function loop() {
+      config.time += config.speed;
+      draw();
+      requestAnimationFrame(loop);
     });
-    thresholdFolder.add({ addLayer: () => {
-      config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
-      location.reload();
-    }}, 'addLayer');
 
-    animate();
+    // const thresholdFolder = gui.addFolder('Thresholds');
+    // config.thresholds.forEach((layer, i) => {
+    //   const f = thresholdFolder.addFolder(`Layer ${i + 1}`);
+    //   f.add(layer, 'threshold', 0, 1, 0.01).onChange(draw);
+    //   f.addColor(layer, 'color').onChange(draw);
+    // });
+    // thresholdFolder.add({ addLayer: () => {
+    //   config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
+    //   location.reload();
+    // }}, 'addLayer');
+
+    // animate();
   </script>
 </body>
 </html>
