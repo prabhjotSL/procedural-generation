@@ -27,17 +27,14 @@
   </style>
 </head>
 <body>
-
   <h1>🎛️ Perlin Noise Visualizer</h1>
 
-  <!-- Canvas -->
   <canvas id="perlinCanvas"></canvas>
   <div class="button-container">
     <button id="downloadImage">Export PNG</button>
     <button id="downloadMap">Export .map</button>
   </div>
 
-  <!-- lil-gui -->
   <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>
   <script>
     const canvas = document.getElementById('perlinCanvas');
@@ -45,10 +42,7 @@
 
     const presets = {
       Island: {
-        scale: 50,
-        seed: 0,
-        mask: true,
-        maskShape: 'circle',
+        scale: 50, seed: 0, mask: true, maskShape: 'circle',
         thresholds: [
           { threshold: 0.2, color: '#000000' },
           { threshold: 0.3, color: '#ffe39f' },
@@ -60,10 +54,7 @@
         ]
       },
       Archipelago: {
-        scale: 120,
-        seed: 8,
-        mask: true,
-        maskShape: 'circle',
+        scale: 120, seed: 8, mask: true, maskShape: 'circle',
         thresholds: [
           { threshold: 0.4, color: '#000000' },
           { threshold: 0.48, color: '#ffe39f' },
@@ -75,9 +66,7 @@
         ]
       },
       Desert: {
-        scale: 80,
-        seed: 3,
-        mask: false,
+        scale: 80, seed: 3, mask: false,
         thresholds: [
           { threshold: 0.3, color: '#000000' },
           { threshold: 0.5, color: '#e0c080' },
@@ -87,9 +76,7 @@
         ]
       },
       Rainforest: {
-        scale: 45,
-        seed: 10,
-        mask: false,
+        scale: 45, seed: 10, mask: false,
         thresholds: [
           { threshold: 0.25, color: '#000000' },
           { threshold: 0.35, color: '#ffe39f' },
@@ -100,9 +87,7 @@
         ]
       },
       Mountains: {
-        scale: 40,
-        seed: 1,
-        mask: false,
+        scale: 40, seed: 1, mask: false,
         thresholds: [
           { threshold: 0.4, color: '#333333' },
           { threshold: 0.5, color: '#777777' },
@@ -131,16 +116,44 @@
         const preset = presets[name];
         config.scale = preset.scale;
         config.seed = preset.seed;
-        config.mask = preset.mask;
-        config.maskShape = preset.maskShape;
+        config.mask = preset.mask ?? true;
+        config.maskShape = preset.maskShape ?? 'circle';
         config.thresholds = JSON.parse(JSON.stringify(preset.thresholds));
-        draw();
+
+        // Update GUI controllers
+        guiControllers.scale.setValue(config.scale);
+        guiControllers.seed.setValue(config.seed);
+        guiControllers.mask.setValue(config.mask);
+        guiControllers.maskShape.setValue(config.maskShape);
+
         rebuildThresholdGUI();
+        draw();
       },
       regenerate: () => draw()
     };
 
-    // Rebuild threshold UI
+    // GUI Setup
+    const gui = new lil.GUI();
+    const guiControllers = {};
+    guiControllers.width = gui.add(config, 'width', 100, 1000, 10).onChange(draw);
+    guiControllers.height = gui.add(config, 'height', 100, 1000, 10).onChange(draw);
+    guiControllers.scale = gui.add(config, 'scale', 10, 200, 1).onChange(draw);
+    guiControllers.seed = gui.add(config, 'seed', 0, 100, 1).onChange(draw);
+    guiControllers.speed = gui.add(config, 'speed', 0, 0.1, 0.001);
+    guiControllers.grayscale = gui.add(config, 'grayscale').onChange(draw);
+    guiControllers.octaves = gui.add(config, 'octaves').onChange(draw);
+    guiControllers.smoothing = gui.add(config, 'smoothing').onChange(draw);
+    guiControllers.shading = gui.add(config, 'shading').onChange(draw);
+    guiControllers.mask = gui.add(config, 'mask').onChange(draw);
+    guiControllers.maskShape = gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(draw);
+    gui.add(config, 'regenerate');
+
+    const presetWrapper = { preset: 'Island' };
+    gui.add(presetWrapper, 'preset', Object.keys(presets))
+      .name('Load Preset')
+      .onChange(name => config.applyPreset(name));
+
+    // Threshold GUI
     let thresholdFolder;
     function rebuildThresholdGUI() {
       if (thresholdFolder) gui.removeFolder(thresholdFolder);
@@ -157,6 +170,7 @@
       }}, 'addLayer');
     }
 
+    // Perlin + Helpers
     function fract(x) { return x - Math.floor(x); }
     function pseudoRandom(x, y, seed = 0) {
       const dot = x * 127.1 + y * 311.7 + seed * 9999;
@@ -176,38 +190,27 @@
     function lerp(a, b, t) { return a + t * (b - a); }
 
     function perlin(x, y, seed = 0) {
-      let total = 0;
-      let frequency = 1;
-      let amplitude = 1;
-      let maxValue = 0;
+      let total = 0, frequency = 1, amplitude = 1, maxValue = 0;
       const octaves = config.octaves ? 4 : 1;
-
       for (let i = 0; i < octaves; i++) {
         total += rawPerlin(x * frequency, y * frequency, seed) * amplitude;
         maxValue += amplitude;
         amplitude *= 0.5;
         frequency *= 2;
       }
-
       return total / maxValue;
     }
 
     function rawPerlin(x, y, seed = 0) {
-      const x0 = Math.floor(x);
-      const x1 = x0 + 1;
-      const y0 = Math.floor(y);
-      const y1 = y0 + 1;
-      const sx = x - x0;
-      const sy = y - y0;
-      const u = fade(sx);
-      const v = fade(sy);
+      const x0 = Math.floor(x), x1 = x0 + 1;
+      const y0 = Math.floor(y), y1 = y0 + 1;
+      const sx = x - x0, sy = y - y0;
+      const u = fade(sx), v = fade(sy);
       const n00 = dotGridGradient(x0, y0, x, y, seed);
       const n10 = dotGridGradient(x1, y0, x, y, seed);
       const n01 = dotGridGradient(x0, y1, x, y, seed);
       const n11 = dotGridGradient(x1, y1, x, y, seed);
-      const ix0 = lerp(n00, n10, u);
-      const ix1 = lerp(n01, n11, u);
-      return lerp(ix0, ix1, v);
+      return lerp(lerp(n00, n10, u), lerp(n01, n11, u), v);
     }
 
     function hexToRgb(hex) {
@@ -219,27 +222,25 @@
       } : { r: 0, g: 0, b: 0 };
     }
 
-    function interpolateColors(color1, color2, t) {
-      const rgb1 = hexToRgb(color1);
-      const rgb2 = hexToRgb(color2);
+    function interpolateColors(c1, c2, t) {
+      const a = hexToRgb(c1), b = hexToRgb(c2);
       return {
-        r: Math.round(lerp(rgb1.r, rgb2.r, t)),
-        g: Math.round(lerp(rgb1.g, rgb2.g, t)),
-        b: Math.round(lerp(rgb1.b, rgb2.b, t))
+        r: Math.round(lerp(a.r, b.r, t)),
+        g: Math.round(lerp(a.g, b.g, t)),
+        b: Math.round(lerp(a.b, b.b, t))
       };
     }
 
     function getColorForValue(value) {
       for (let i = 0; i < config.thresholds.length; i++) {
-        if (value <= config.thresholds[i].threshold) {
+        const t = config.thresholds[i];
+        if (value <= t.threshold) {
           if (config.smoothing && i > 0) {
             const prev = config.thresholds[i - 1];
-            const next = config.thresholds[i];
-            const t = (value - prev.threshold) / (next.threshold - prev.threshold);
-            return interpolateColors(prev.color, next.color, t);
-          } else {
-            return hexToRgb(config.thresholds[i].color);
+            const ratio = (value - prev.threshold) / (t.threshold - prev.threshold);
+            return interpolateColors(prev.color, t.color, ratio);
           }
+          return hexToRgb(t.color);
         }
       }
       return hexToRgb('#ffffff');
@@ -247,19 +248,15 @@
 
     function applyMask(x, y, value) {
       if (!config.mask) return value;
-      const cx = config.width / 2;
-      const cy = config.height / 2;
+      const cx = config.width / 2, cy = config.height / 2;
       const dx = (x - cx) / (config.width / 2);
       const dy = (y - cy) / (config.height / 2);
       if (config.maskShape === 'circle') {
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        return value * (1 - Math.min(dist, 1));
+        return value * (1 - Math.min(Math.sqrt(dx * dx + dy * dy), 1));
       } else if (config.maskShape === 'square') {
-        const maxDist = Math.max(Math.abs(dx), Math.abs(dy));
-        return value * (1 - Math.min(maxDist, 1));
+        return value * (1 - Math.min(Math.max(Math.abs(dx), Math.abs(dy)), 1));
       } else if (config.maskShape === 'hexagon') {
-        const qx = Math.abs(dx);
-        const qy = Math.abs(dy);
+        const qx = Math.abs(dx), qy = Math.abs(dy);
         const d = Math.max(qx, qy * 0.866 + qx * 0.5);
         return value * (1 - Math.min(d, 1));
       }
@@ -269,26 +266,22 @@
     function draw() {
       canvas.width = config.width;
       canvas.height = config.height;
-      const imageData = ctx.createImageData(canvas.width, canvas.height);
-      const data = imageData.data;
-
+      const img = ctx.createImageData(canvas.width, canvas.height);
+      const data = img.data;
       for (let y = 0; y < canvas.height; y++) {
         for (let x = 0; x < canvas.width; x++) {
           const nx = x / config.scale;
           const ny = y / config.scale;
           let value = (perlin(nx, ny + config.time, config.seed) + 1) / 2;
           value = applyMask(x, y, value);
-
           let rgb = config.grayscale ? { r: value * 255, g: value * 255, b: value * 255 } : getColorForValue(value);
-
           if (config.shading) {
             const next = (perlin(nx + 0.01, ny + 0.01, config.seed) + 1) / 2;
             const shade = value - next;
-            rgb.r = Math.max(0, Math.min(255, rgb.r + shade * 100));
-            rgb.g = Math.max(0, Math.min(255, rgb.g + shade * 100));
-            rgb.b = Math.max(0, Math.min(255, rgb.b + shade * 100));
+            rgb.r = Math.min(255, Math.max(0, rgb.r + shade * 100));
+            rgb.g = Math.min(255, Math.max(0, rgb.g + shade * 100));
+            rgb.b = Math.min(255, Math.max(0, rgb.b + shade * 100));
           }
-
           const idx = (y * canvas.width + x) * 4;
           data[idx] = rgb.r;
           data[idx + 1] = rgb.g;
@@ -296,14 +289,7 @@
           data[idx + 3] = 255;
         }
       }
-
-      ctx.putImageData(imageData, 0, 0);
-    }
-
-    function animate() {
-      config.time += config.speed;
-      draw();
-      requestAnimationFrame(animate);
+      ctx.putImageData(img, 0, 0);
     }
 
     function exportImage() {
@@ -314,17 +300,17 @@
     }
 
     function exportMap() {
-      let mapData = '';
+      let map = '';
       for (let y = 0; y < config.height; y++) {
         for (let x = 0; x < config.width; x++) {
           const nx = x / config.scale;
           const ny = y / config.scale;
           let value = (perlin(nx, ny + config.time, config.seed) + 1) / 2;
           value = applyMask(x, y, value);
-          mapData += value.toFixed(3) + (x === config.width - 1 ? '\n' : ',');
+          map += value.toFixed(3) + (x === config.width - 1 ? '\n' : ',');
         }
       }
-      const blob = new Blob([mapData], { type: 'text/plain' });
+      const blob = new Blob([map], { type: 'text/plain' });
       const link = document.createElement('a');
       link.download = 'perlin_noise.map';
       link.href = URL.createObjectURL(blob);
@@ -334,21 +320,6 @@
     document.getElementById('downloadImage').onclick = exportImage;
     document.getElementById('downloadMap').onclick = exportMap;
 
-    const gui = new lil.GUI();
-    gui.add(config, 'width', 100, 1000, 10).onChange(draw);
-    gui.add(config, 'height', 100, 1000, 10).onChange(draw);
-    gui.add(config, 'scale', 10, 200, 1).onChange(draw);
-    gui.add(config, 'seed', 0, 100, 1).onChange(draw);
-    gui.add(config, 'speed', 0, 0.1, 0.001);
-    gui.add(config, 'grayscale').onChange(draw);
-    gui.add(config, 'octaves').onChange(draw);
-    gui.add(config, 'smoothing').onChange(draw);
-    gui.add(config, 'shading').onChange(draw);
-    gui.add(config, 'mask').onChange(draw);
-    gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(draw);
-    gui.add(config, 'regenerate');
-    gui.add(config, 'applyPreset', Object.keys(presets)).name('Load Preset');
-
     rebuildThresholdGUI();
     draw();
     requestAnimationFrame(function loop() {
@@ -356,19 +327,6 @@
       draw();
       requestAnimationFrame(loop);
     });
-
-    // const thresholdFolder = gui.addFolder('Thresholds');
-    // config.thresholds.forEach((layer, i) => {
-    //   const f = thresholdFolder.addFolder(`Layer ${i + 1}`);
-    //   f.add(layer, 'threshold', 0, 1, 0.01).onChange(draw);
-    //   f.addColor(layer, 'color').onChange(draw);
-    // });
-    // thresholdFolder.add({ addLayer: () => {
-    //   config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
-    //   location.reload();
-    // }}, 'addLayer');
-
-    // animate();
   </script>
 </body>
 </html>
