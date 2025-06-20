@@ -96,7 +96,12 @@
           { threshold: 1.0, color: '#ffffff' }
         ]
       }
-    };
+    };    // Performance optimization - debounced draw function
+    let drawTimeout;
+    function debouncedDraw() {
+      clearTimeout(drawTimeout);
+      drawTimeout = setTimeout(draw, 50); // 50ms debounce
+    }
 
     const config = {
       width: 400,
@@ -112,6 +117,7 @@
       mask: true,
       maskShape: 'circle',
       thresholds: JSON.parse(JSON.stringify(presets.Island.thresholds)),
+      currentPreset: 'Island',
       applyPreset(name) {
         const preset = presets[name];
         config.scale = preset.scale;
@@ -119,55 +125,95 @@
         config.mask = preset.mask ?? true;
         config.maskShape = preset.maskShape ?? 'circle';
         config.thresholds = JSON.parse(JSON.stringify(preset.thresholds));
+        config.currentPreset = name;
 
         // Update GUI controllers
         guiControllers.scale.setValue(config.scale);
         guiControllers.seed.setValue(config.seed);
         guiControllers.mask.setValue(config.mask);
         guiControllers.maskShape.setValue(config.maskShape);
+        presetController.setValue(name);
 
         rebuildThresholdGUI();
         draw();
       },
       regenerate: () => draw()
-    };
-
-    // GUI Setup
+    };    // GUI Setup
     const gui = new lil.GUI();
     const guiControllers = {};
-    guiControllers.width = gui.add(config, 'width', 100, 1000, 10).onChange(draw);
-    guiControllers.height = gui.add(config, 'height', 100, 1000, 10).onChange(draw);
-    guiControllers.scale = gui.add(config, 'scale', 10, 200, 1).onChange(draw);
-    guiControllers.seed = gui.add(config, 'seed', 0, 100, 1).onChange(draw);
+    guiControllers.width = gui.add(config, 'width', 100, 1000, 10).onChange(debouncedDraw);
+    guiControllers.height = gui.add(config, 'height', 100, 1000, 10).onChange(debouncedDraw);
+    guiControllers.scale = gui.add(config, 'scale', 10, 200, 1).onChange(debouncedDraw);
+    guiControllers.seed = gui.add(config, 'seed', 0, 100, 1).onChange(debouncedDraw);
     guiControllers.speed = gui.add(config, 'speed', 0, 0.1, 0.001);
-    guiControllers.grayscale = gui.add(config, 'grayscale').onChange(draw);
-    guiControllers.octaves = gui.add(config, 'octaves').onChange(draw);
-    guiControllers.smoothing = gui.add(config, 'smoothing').onChange(draw);
-    guiControllers.shading = gui.add(config, 'shading').onChange(draw);
-    guiControllers.mask = gui.add(config, 'mask').onChange(draw);
-    guiControllers.maskShape = gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(draw);
+    guiControllers.grayscale = gui.add(config, 'grayscale').onChange(debouncedDraw);
+    guiControllers.octaves = gui.add(config, 'octaves').onChange(debouncedDraw);
+    guiControllers.smoothing = gui.add(config, 'smoothing').onChange(debouncedDraw);
+    guiControllers.shading = gui.add(config, 'shading').onChange(debouncedDraw);
+    guiControllers.mask = gui.add(config, 'mask').onChange(debouncedDraw);
+    guiControllers.maskShape = gui.add(config, 'maskShape', ['circle', 'square', 'hexagon']).onChange(debouncedDraw);
     gui.add(config, 'regenerate');
 
-    const presetWrapper = { preset: 'Island' };
-    gui.add(presetWrapper, 'preset', Object.keys(presets))
-      .name('Load Preset')
-      .onChange(name => config.applyPreset(name));
-
-    // Threshold GUI
+    // Add preset controller with Custom option
+    const presetOptions = [...Object.keys(presets), 'Custom'];
+    const presetController = gui.add(config, 'currentPreset', presetOptions)
+      .name('Preset')
+      .onChange(name => {
+        if (name !== 'Custom') {
+          config.applyPreset(name);
+        }
+      });    // Threshold GUI
     let thresholdFolder;
+    let thresholdControllers = [];
+    
     function rebuildThresholdGUI() {
-      if (thresholdFolder) gui.removeFolder(thresholdFolder);
+      if (thresholdFolder) {
+        thresholdFolder.destroy();
+        thresholdControllers = [];
+      }
       thresholdFolder = gui.addFolder('Thresholds');
       config.thresholds.forEach((layer, i) => {
         const f = thresholdFolder.addFolder(`Layer ${i + 1}`);
-        f.add(layer, 'threshold', 0, 1, 0.01).onChange(draw);
-        f.addColor(layer, 'color').onChange(draw);
+        const thresholdCtrl = f.add(layer, 'threshold', 0, 1, 0.01).onChange(() => {
+          // Mark as custom when threshold values are manually changed
+          if (config.currentPreset !== 'Custom') {
+            config.currentPreset = 'Custom';
+            presetController.setValue('Custom');
+          }
+          debouncedDraw();
+        });
+        const colorCtrl = f.addColor(layer, 'color').onChange(() => {
+          // Mark as custom when colors are manually changed
+          if (config.currentPreset !== 'Custom') {
+            config.currentPreset = 'Custom';
+            presetController.setValue('Custom');
+          }
+          debouncedDraw();
+        });
+        thresholdControllers.push({ threshold: thresholdCtrl, color: colorCtrl });
       });
-      thresholdFolder.add({ addLayer: () => {
-        config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
-        rebuildThresholdGUI();
-        draw();
-      }}, 'addLayer');
+      
+      thresholdFolder.add({ 
+        addLayer: () => {
+          config.thresholds.push({ threshold: 1.0, color: '#ffffff' });
+          config.currentPreset = 'Custom';
+          presetController.setValue('Custom');
+          rebuildThresholdGUI();
+          debouncedDraw();
+        }
+      }, 'addLayer');
+      
+      thresholdFolder.add({ 
+        removeLayer: () => {
+          if (config.thresholds.length > 1) {
+            config.thresholds.pop();
+            config.currentPreset = 'Custom';
+            presetController.setValue('Custom');
+            rebuildThresholdGUI();
+            debouncedDraw();
+          }
+        }
+      }, 'removeLayer');
     }
 
     // Perlin + Helpers
@@ -318,15 +364,18 @@
     }
 
     document.getElementById('downloadImage').onclick = exportImage;
-    document.getElementById('downloadMap').onclick = exportMap;
-
-    rebuildThresholdGUI();
+    document.getElementById('downloadMap').onclick = exportMap;    rebuildThresholdGUI();
     draw();
-    requestAnimationFrame(function loop() {
+    
+    let animationId;
+    function loop() {
       config.time += config.speed;
-      draw();
-      requestAnimationFrame(loop);
-    });
+      if (config.speed > 0) {
+        draw();
+      }
+      animationId = requestAnimationFrame(loop);
+    }
+    loop();
   </script>
 </body>
 </html>
