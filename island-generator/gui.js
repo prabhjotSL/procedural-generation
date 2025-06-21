@@ -213,14 +213,9 @@ function initializeGUI() {
     }
   }, 'exportJPG').name('📷 Export JPG');
   
-    // Canvas settings folder
+  // Canvas settings folder
   const canvasFolder = gui.addFolder('Canvas Settings');
-  canvasFolder.close(); // Open by default
-  
-  // Initialize fullscreen based on screen size
-  if (!config.hasOwnProperty('fullscreen')) {
-    config.fullscreen = window.innerWidth <= 768;
-  }
+  canvasFolder.close(); // Start closed by default
   
   // Canvas dimension controls
   guiControllers.width = canvasFolder.add(config, 'width', 100, 2000, 10)
@@ -244,70 +239,6 @@ function initializeGUI() {
         debouncedDraw();
       }
     });
-    // Fullscreen toggle
-//   guiControllers.fullscreen = canvasFolder.add(config, 'fullscreen')
-//     .name('Fullscreen Canvas')
-//     .onChange((value) => {
-//       if (value) {
-//         // Store current dimensions before going fullscreen
-//         const currentWidth = guiControllers.width ? guiControllers.width.getValue() : config.width || 512;
-//         const currentHeight = guiControllers.height ? guiControllers.height.getValue() : config.height || 512;
-        
-//         // Apply fullscreen styles
-//         canvas.style.position = 'fixed';
-//         canvas.style.top = '0';
-//         canvas.style.left = '0';
-//         canvas.style.width = '100vw';
-//         canvas.style.height = '100vh';
-//         canvas.style.zIndex = '999';
-//         canvas.width = window.innerWidth;
-//         canvas.height = window.innerHeight;
-        
-//         // Store the original dimensions for restoration
-//         canvas.dataset.originalWidth = currentWidth;
-//         canvas.dataset.originalHeight = currentHeight;
-        
-//         // Hide dimension controls when fullscreen
-//         if (guiControllers.width) guiControllers.width.hide();
-//         if (guiControllers.height) guiControllers.height.hide();
-//       } else {
-//         // Restore original dimensions from stored values or GUI controls
-//         const restoreWidth = canvas.dataset.originalWidth || 
-//                            (guiControllers.width ? guiControllers.width.getValue() : 512);
-//         const restoreHeight = canvas.dataset.originalHeight || 
-//                             (guiControllers.height ? guiControllers.height.getValue() : 512);
-        
-//         // Remove fullscreen styles
-//         canvas.style.position = '';
-//         canvas.style.top = '';
-//         canvas.style.left = '';
-//         canvas.style.zIndex = '';
-//         canvas.style.width = restoreWidth + 'px';
-//         canvas.style.height = restoreHeight + 'px';
-//         canvas.width = parseInt(restoreWidth);
-//         canvas.height = parseInt(restoreHeight);
-        
-//         // Update config to match restored dimensions
-//         config.width = parseInt(restoreWidth);
-//         config.height = parseInt(restoreHeight);
-        
-//         // Update GUI controls to match restored values
-//         if (guiControllers.width) guiControllers.width.setValue(config.width);
-//         if (guiControllers.height) guiControllers.height.setValue(config.height);
-        
-//         // Show dimension controls when not fullscreen
-//         if (guiControllers.width) guiControllers.width.show();
-//         if (guiControllers.height) guiControllers.height.show();
-//       }
-//       markAsCustom();
-//       debouncedDraw();
-//     });
-  
-//   // Set initial visibility of dimension controls
-//   if (config.fullscreen) {
-//     if (guiControllers.width) guiControllers.width.hide();
-//     if (guiControllers.height) guiControllers.height.hide();
-//   }
 
   // Preset selector
   const presetOptions = [...Object.keys(presets), 'Custom'];
@@ -403,31 +334,44 @@ function initializeGUI() {
   
   // Make GUI mobile responsive
   gui.domElement.style.position = 'fixed';
-  gui.domElement.style.top = '10px';
+  if (window.innerWidth > 768) {
+    gui.domElement.style.top = '10px';
+  } else {
+    gui.domElement.style.top = '500px';
+  }
+
   gui.domElement.style.right = '10px';
-  gui.domElement.style.zIndex = '1000';
-    // Add mobile styles
+  gui.domElement.style.zIndex = '1000';    // Add mobile styles
   const style = document.createElement('style');
   style.textContent = `
     /* Canvas positioning */
-    #canvas {
+    #perlinCanvas {
       display: block;
-      margin: 0;
+      margin: 0 auto;
       padding: 0;
+      max-width: calc(100vw - 2em);
+      max-height: calc(100vh - 120px);
     }
     
     /* Fullscreen canvas styles */
-    #canvas.fullscreen {
+    #perlinCanvas.fullscreen {
       position: fixed !important;
       top: 0 !important;
       left: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       z-index: 999 !important;
+      max-width: none !important;
+      max-height: none !important;
     }
     
     /* Mobile responsive GUI */
     @media (max-width: 768px) {
+      #perlinCanvas {
+        max-width: calc(100vw - 1em) !important;
+        max-height: calc(100vh - 80px) !important;
+      }
+      
       .lil-gui {
         width: 280px !important;
         font-size: 12px !important;
@@ -441,7 +385,13 @@ function initializeGUI() {
         font-size: 11px !important;
       }
     }
+    
     @media (max-width: 480px) {
+      #perlinCanvas {
+        max-width: calc(100vw - 0.5em) !important;
+        max-height: calc(100vh - 60px) !important;
+      }
+      
       .lil-gui {
         width: 250px !important;
         max-height: 80vh !important;
