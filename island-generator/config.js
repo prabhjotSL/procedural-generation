@@ -74,8 +74,8 @@ const presets = {
  */
 const config = {
   // Canvas dimensions
-  width: 400,
-  height: 400,
+  width: 512,
+  height: 512,
   
   // Noise parameters
   scale: 50,           // Zoom level of the noise

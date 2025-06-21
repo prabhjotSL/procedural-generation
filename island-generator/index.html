@@ -7,7 +7,7 @@
   <style>
     body {
       margin: 0;
-      background: #111;
+      background: #121d2c;
       color: #fff;
       font-family: sans-serif;
       display: flex;
@@ -18,7 +18,8 @@
     }
     canvas {
       image-rendering: pixelated;
-      border: 1px solid #444;
+      border: 1px solid #ffffff;
+      border-radius: 12px;
       margin-top: 1em;
     }
     .button-container {
@@ -27,13 +28,9 @@
   </style>
 </head>
 <body>
-  <h1>🎛️ Perlin Noise Visualizer</h1>
+  <h1>Terrain Generator</h1>
 
   <canvas id="perlinCanvas"></canvas>
-  <div class="button-container">
-    <button id="downloadImage">Export PNG</button>
-    <button id="downloadMap">Export .map</button>
-  </div>
 
   <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.20"></script>
